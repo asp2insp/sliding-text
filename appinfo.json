@@ -8,7 +8,9 @@
   "targetPlatforms": [
     "aplite",
     "basalt",
-    "chalk"
+    "chalk",
+    "emery",
+    "gabbro"
   ],
   "watchapp": {
     "watchface": true

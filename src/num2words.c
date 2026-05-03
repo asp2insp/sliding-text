@@ -113,41 +113,42 @@ void time_to_common_words(int hours, int minutes, char *words) {
   // PBL_ASSERT(hours >= 0 && hours < 24, "Invalid number of hours");
   // PBL_ASSERT(minutes >= 0 && minutes < 60, "Invalid number of minutes");
 
+  const size_t bufsize = 32;
   size_t written = 0;
   strcpy(words, "");
 
   if (minutes != 0 && (minutes >= 10 || minutes == 5 || hours == 0 || hours == 12)) {
     if (minutes == 15) {
-      written += sprintf(words, "%s %s ", STR_QUARTER, STR_AFTER);
+      written += snprintf(words, bufsize, "%s %s ", STR_QUARTER, STR_AFTER);
     } else if (minutes == 45) {
-      written += sprintf(words, "%s %s ", STR_QUARTER, STR_TO);
+      written += snprintf(words, bufsize, "%s %s ", STR_QUARTER, STR_TO);
       hours = (hours + 1) % 24;
     } else if (minutes == 30) {
-      written += sprintf(words, "%s %s ", STR_HALF, STR_PAST);
+      written += snprintf(words, bufsize, "%s %s ", STR_HALF, STR_PAST);
     } else if (minutes < 30) {
       written += append_number(words, minutes);
-      written += sprintf(words + written, " %s ", STR_AFTER);
+      written += snprintf(words + written, bufsize - written, " %s ", STR_AFTER);
     } else {
       written += append_number(words, 60 - minutes);
-      written += sprintf(words + written, " %s ", STR_TO);
+      written += snprintf(words + written, bufsize - written, " %s ", STR_TO);
       hours = (hours + 1) % 24;
     }
   }
 
   if (hours == 0) {
-    written += sprintf(words + written, "%s", STR_MIDNIGHT);
+    written += snprintf(words + written, bufsize - written, "%s", STR_MIDNIGHT);
   } else if (hours == 12) {
     strcat(words, STR_NOON);
-    written += sprintf(words + written, "%s", STR_NOON);
+    written += snprintf(words + written, bufsize - written, "%s", STR_NOON);
   } else {
     written += append_number(words, hours % 12);
   }
 
   if (minutes < 10 && minutes != 5 && !(hours == 0 || hours == 12)) {
     if (minutes == 0) {
-      sprintf(words + written, " %s%s", STR_OH_TICK, STR_CLOCK);
+      snprintf(words + written, bufsize - written, " %s%s", STR_OH_TICK, STR_CLOCK);
     } else {
-      sprintf(words + written, " %s%s", STR_OH_TICK, ONES[minutes]);
+      snprintf(words + written, bufsize - written, " %s%s", STR_OH_TICK, ONES[minutes]);
     }
   }
 }

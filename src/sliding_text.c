@@ -204,8 +204,36 @@ static void handle_minute_tick(struct tm *tick_time, TimeUnits units_changed) {
   make_animation();
 }
 
+static void layout_rows(void) {
+  Layer *window_layer = window_get_root_layer(s_data->window);
+  GRect bounds = layer_get_unobstructed_bounds(window_layer);
+  const int16_t width = bounds.size.w;
+  // Original layout was tuned for 168px-tall screens. On taller displays
+  // (emery, gabbro) or when nothing is obstructing, shift down to center.
+  // When quick view obstructs, this same calc re-centers in the smaller area.
+  const int16_t y_off = (bounds.size.h > 168) ? (bounds.size.h - 168) / 2 : 0;
+  const int16_t ys[3] = {20 + y_off, 56 + y_off, 92 + y_off};
+  const int16_t hs[3] = {60, 96, 132};
+  for (int i = 0; i < 3; i++) {
+    GRect frame = layer_get_frame(text_layer_get_layer(s_data->rows[i].label));
+    frame.origin.x = 0;
+    frame.origin.y = ys[i];
+    frame.size.w = width;
+    frame.size.h = hs[i];
+    layer_set_frame(text_layer_get_layer(s_data->rows[i].label), frame);
+    s_data->rows[i].still_pos = 0;
+    s_data->rows[i].left_pos = -width;
+    s_data->rows[i].right_pos = width;
+  }
+}
+
+static void handle_unobstructed_change(AnimationProgress progress, void *context) {
+  layout_rows();
+}
+
 static void handle_deinit(void) {
   tick_timer_service_unsubscribe();
+  unobstructed_area_service_unsubscribe();
   free(s_data);
 }
 
@@ -229,13 +257,16 @@ static void handle_init() {
   Layer *window_layer = window_get_root_layer(data->window);
   GRect layer_frame = layer_get_frame(window_layer);
   const int16_t width = layer_frame.size.w;
-  init_sliding_row(data, &data->rows[0], GRect(0, 20, width, 60), data->bitham42_bold, 6);
+  // Original layout was tuned for 168px-tall screens. On taller displays
+  // (emery, gabbro) shift down to keep rows vertically centered.
+  const int16_t y_off = (layer_frame.size.h > 168) ? (layer_frame.size.h - 168) / 2 : 0;
+  init_sliding_row(data, &data->rows[0], GRect(0, 20 + y_off, width, 60), data->bitham42_bold, 6);
   layer_add_child(window_layer, text_layer_get_layer(data->rows[0].label));
 
-  init_sliding_row(data, &data->rows[1], GRect(0, 56, width, 96), data->bitham42_light, 3);
+  init_sliding_row(data, &data->rows[1], GRect(0, 56 + y_off, width, 96), data->bitham42_light, 3);
   layer_add_child(window_layer, text_layer_get_layer(data->rows[1].label));
 
-  init_sliding_row(data, &data->rows[2], GRect(0, 92, width, 132), data->bitham42_light, 0);
+  init_sliding_row(data, &data->rows[2], GRect(0, 92 + y_off, width, 132), data->bitham42_light, 0);
   layer_add_child(window_layer, text_layer_get_layer(data->rows[2].label));
 
   GFont norm14 = fonts_get_system_font(FONT_KEY_GOTHIC_14);
@@ -253,6 +284,9 @@ static void handle_init() {
   make_animation();
 
   tick_timer_service_subscribe(MINUTE_UNIT, handle_minute_tick);
+
+  UnobstructedAreaHandlers ua_handlers = { .change = handle_unobstructed_change };
+  unobstructed_area_service_subscribe(ua_handlers, NULL);
 
   const bool animated = true;
   window_stack_push(data->window, animated);
