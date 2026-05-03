@@ -19,6 +19,39 @@
     "dummy": 0
   },
   "resources": {
-    "media": []
+    "media": [
+      {
+        "type": "font",
+        "name": "FONT_GOTHAM_BOLD_50",
+        "file": "fonts/Gotham-Bold.ttf",
+        "characterRegex": "[a-z' ]",
+        "compatibility": "2.7",
+        "targetPlatforms": ["emery"]
+      },
+      {
+        "type": "font",
+        "name": "FONT_GOTHAM_LIGHT_50",
+        "file": "fonts/Gotham-Light.ttf",
+        "characterRegex": "[a-z' ]",
+        "compatibility": "2.7",
+        "targetPlatforms": ["emery"]
+      },
+      {
+        "type": "font",
+        "name": "FONT_GOTHAM_BOLD_40",
+        "file": "fonts/Gotham-Bold.ttf",
+        "characterRegex": "[a-z' ]",
+        "compatibility": "2.7",
+        "targetPlatforms": ["gabbro"]
+      },
+      {
+        "type": "font",
+        "name": "FONT_GOTHAM_LIGHT_32",
+        "file": "fonts/Gotham-Light.ttf",
+        "characterRegex": "[a-z' ]",
+        "compatibility": "2.7",
+        "targetPlatforms": ["gabbro"]
+      }
+    ]
   }
 }

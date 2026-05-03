@@ -208,12 +208,31 @@ static void layout_rows(void) {
   Layer *window_layer = window_get_root_layer(s_data->window);
   GRect bounds = layer_get_unobstructed_bounds(window_layer);
   const int16_t width = bounds.size.w;
-  // Original layout was tuned for 168px-tall screens. On taller displays
-  // (emery, gabbro) or when nothing is obstructing, shift down to center.
-  // When quick view obstructs, this same calc re-centers in the smaller area.
+
+#if defined(PBL_PLATFORM_EMERY)
+  const int16_t row_h = 48;
+  const int16_t frame_h = 70;
+#elif defined(PBL_PLATFORM_GABBRO)
+  const int16_t row_h = 38;
+  const int16_t frame_h = 56;
+#else
+  const int16_t row_h = 0;
+  const int16_t frame_h = 0;
+  (void)frame_h;
+#endif
+
+#if defined(PBL_PLATFORM_EMERY) || defined(PBL_PLATFORM_GABBRO)
+  const int16_t total_h = row_h * 2 + frame_h;
+  const int16_t y0 = (bounds.size.h - total_h) / 2;
+  const int16_t ys[3] = {y0, y0 + row_h, y0 + row_h * 2};
+  const int16_t hs[3] = {frame_h, frame_h, frame_h};
+#else
+  // Original layout tuned for 168px-tall screens.
   const int16_t y_off = (bounds.size.h > 168) ? (bounds.size.h - 168) / 2 : 0;
   const int16_t ys[3] = {20 + y_off, 56 + y_off, 92 + y_off};
   const int16_t hs[3] = {60, 96, 132};
+#endif
+
   for (int i = 0; i < 3; i++) {
     GRect frame = layer_get_frame(text_layer_get_layer(s_data->rows[i].label));
     frame.origin.x = 0;
@@ -234,6 +253,16 @@ static void handle_unobstructed_change(AnimationProgress progress, void *context
 static void handle_deinit(void) {
   tick_timer_service_unsubscribe();
   unobstructed_area_service_unsubscribe();
+  animation_unschedule(s_data->animation);
+  for (int i = 0; i < 3; i++) {
+    text_layer_destroy(s_data->rows[i].label);
+  }
+  text_layer_destroy(s_data->demo_label);
+  window_destroy(s_data->window);
+#if defined(PBL_PLATFORM_EMERY) || defined(PBL_PLATFORM_GABBRO)
+  fonts_unload_custom_font(s_data->bitham42_bold);
+  fonts_unload_custom_font(s_data->bitham42_light);
+#endif
   free(s_data);
 }
 
@@ -251,23 +280,53 @@ static void handle_init() {
 
   window_set_background_color(data->window, GColorBlack);
 
+#if defined(PBL_PLATFORM_EMERY)
+  data->bitham42_bold = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_GOTHAM_BOLD_50));
+  data->bitham42_light = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_GOTHAM_LIGHT_50));
+  const int16_t row_h = 48;     // y-pitch between rows
+  const int16_t frame_h = 70;   // taller frame so glyphs aren't clipped
+  const int16_t row_gap = 0;
+#elif defined(PBL_PLATFORM_GABBRO)
+  data->bitham42_bold = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_GOTHAM_BOLD_40));
+  data->bitham42_light = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_GOTHAM_LIGHT_32));
+  const int16_t row_h = 38;
+  const int16_t frame_h = 56;
+  const int16_t row_gap = 0;
+#else
   data->bitham42_bold = fonts_get_system_font(FONT_KEY_BITHAM_42_BOLD);
   data->bitham42_light = fonts_get_system_font(FONT_KEY_BITHAM_42_LIGHT);
+  const int16_t row_h = 0;     // unused; legacy layout below
+  const int16_t frame_h = 0;
+  const int16_t row_gap = 0;
+  (void)row_h; (void)frame_h; (void)row_gap;
+#endif
 
   Layer *window_layer = window_get_root_layer(data->window);
   GRect layer_frame = layer_get_frame(window_layer);
   const int16_t width = layer_frame.size.w;
+#if defined(PBL_PLATFORM_EMERY) || defined(PBL_PLATFORM_GABBRO)
+  // Compact 3-row stack centered vertically. row_h is the y-pitch between
+  // rows; frame_h is each TextLayer's frame height (taller than pitch so
+  // glyphs aren't clipped at the bottom).
+  const int16_t total_h = row_h * 2 + frame_h;
+  const int16_t y0 = (layer_frame.size.h - total_h) / 2;
+  init_sliding_row(data, &data->rows[0], GRect(0, y0, width, frame_h), data->bitham42_bold, 6);
+  layer_add_child(window_layer, text_layer_get_layer(data->rows[0].label));
+  init_sliding_row(data, &data->rows[1], GRect(0, y0 + row_h + row_gap, width, frame_h), data->bitham42_light, 3);
+  layer_add_child(window_layer, text_layer_get_layer(data->rows[1].label));
+  init_sliding_row(data, &data->rows[2], GRect(0, y0 + (row_h + row_gap) * 2, width, frame_h), data->bitham42_light, 0);
+  layer_add_child(window_layer, text_layer_get_layer(data->rows[2].label));
+#else
   // Original layout was tuned for 168px-tall screens. On taller displays
-  // (emery, gabbro) shift down to keep rows vertically centered.
+  // (e.g. chalk at 180) shift down to keep rows vertically centered.
   const int16_t y_off = (layer_frame.size.h > 168) ? (layer_frame.size.h - 168) / 2 : 0;
   init_sliding_row(data, &data->rows[0], GRect(0, 20 + y_off, width, 60), data->bitham42_bold, 6);
   layer_add_child(window_layer, text_layer_get_layer(data->rows[0].label));
-
   init_sliding_row(data, &data->rows[1], GRect(0, 56 + y_off, width, 96), data->bitham42_light, 3);
   layer_add_child(window_layer, text_layer_get_layer(data->rows[1].label));
-
   init_sliding_row(data, &data->rows[2], GRect(0, 92 + y_off, width, 132), data->bitham42_light, 0);
   layer_add_child(window_layer, text_layer_get_layer(data->rows[2].label));
+#endif
 
   GFont norm14 = fonts_get_system_font(FONT_KEY_GOTHIC_14);
 
