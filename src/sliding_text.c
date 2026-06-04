@@ -185,7 +185,7 @@ static void animation_update(struct Animation *animation, const AnimationProgres
   }
 
   if (!something_changed) {
-    animation_unschedule(data->animation);
+    animation_unschedule(animation);
   }
 }
 
