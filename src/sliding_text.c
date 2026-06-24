@@ -435,9 +435,9 @@ static void handle_minute_tick(struct tm *tick_time, TimeUnits units_changed) {
   }
 }
 
-// ===== Back button / click provider =====
+// ===== Wrist-shake trigger =====
 
-static void back_click_handler(ClickRecognizerRef recognizer, void *context) {
+static void accel_tap_handler(AccelAxisType axis, int32_t direction) {
   SlidingTextData *data = s_data;
   if (data->info_state != INFO_HIDDEN) return;
 
@@ -472,10 +472,6 @@ static void back_click_handler(ClickRecognizerRef recognizer, void *context) {
 
   data->info_state = INFO_ENTERING;
   make_animation();
-}
-
-static void click_config_provider(void *context) {
-  window_long_click_subscribe(BUTTON_ID_SELECT, 700, back_click_handler, NULL);
 }
 
 // ===== AppMessage (weather) =====
@@ -558,6 +554,7 @@ static void handle_unobstructed_change(AnimationProgress progress, void *context
 
 static void handle_deinit(void) {
   tick_timer_service_unsubscribe();
+  accel_tap_service_unsubscribe();
   unobstructed_area_service_unsubscribe();
   if (s_data->animation) {
     animation_unschedule(s_data->animation);
@@ -673,8 +670,8 @@ static void handle_init() {
   layer_set_hidden(text_layer_get_layer(data->demo_label), true);
   layer_mark_dirty(window_layer);
 
-  // Click config for back button info view trigger
-  window_set_click_config_provider(data->window, click_config_provider);
+  // Wrist shake triggers the info view (buttons not available in watchfaces)
+  accel_tap_service_subscribe(accel_tap_handler);
 
   // AppMessage for weather data from phone
   app_message_register_inbox_received(inbox_received_callback);
