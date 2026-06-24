@@ -437,9 +437,10 @@ static void handle_minute_tick(struct tm *tick_time, TimeUnits units_changed) {
 
 // ===== Wrist-shake trigger =====
 
-static void accel_tap_handler(AccelAxisType axis, int32_t direction) {
+static time_t s_last_shake_t = 0;
+
+static void trigger_info_view(void) {
   SlidingTextData *data = s_data;
-  if (data->info_state != INFO_HIDDEN) return;
 
   build_info_view(data);
 
@@ -472,6 +473,25 @@ static void accel_tap_handler(AccelAxisType axis, int32_t direction) {
 
   data->info_state = INFO_ENTERING;
   make_animation();
+  vibes_short_pulse();  // DEBUG: single buzz = info view triggered
+}
+
+static void accel_data_handler(AccelData *accel, uint32_t num_samples) {
+  if (s_data->info_state != INFO_HIDDEN) return;
+
+  for (uint32_t i = 0; i < num_samples; i++) {
+    if (accel[i].did_vibrate) continue;  // ignore samples during haptic feedback
+
+    int32_t total = abs(accel[i].x) + abs(accel[i].y) + abs(accel[i].z);
+    if (total > 2500) {
+      time_t now = time(NULL);
+      if (now - s_last_shake_t >= 3) {
+        s_last_shake_t = now;
+        trigger_info_view();
+        return;
+      }
+    }
+  }
 }
 
 // ===== AppMessage (weather) =====
@@ -554,7 +574,7 @@ static void handle_unobstructed_change(AnimationProgress progress, void *context
 
 static void handle_deinit(void) {
   tick_timer_service_unsubscribe();
-  accel_tap_service_unsubscribe();
+  accel_data_service_unsubscribe();
   unobstructed_area_service_unsubscribe();
   if (s_data->animation) {
     animation_unschedule(s_data->animation);
@@ -685,8 +705,8 @@ static void handle_init() {
   window_stack_push(data->window, animated);
 
   // Subscribe after window is pushed; startup buzz confirms new binary is installed
-  accel_tap_service_subscribe(accel_tap_handler);
-  APP_LOG(APP_LOG_LEVEL_DEBUG, "accel_tap_service_subscribe called");
+  accel_data_service_subscribe(10, accel_data_handler);
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "accel_data_service_subscribe called");
   vibes_double_pulse();  // DEBUG: two buzzes on launch = new binary confirmed
 }
 
