@@ -15,8 +15,12 @@
   "watchapp": {
     "watchface": true
   },
+  "capabilities": ["health"],
   "appKeys": {
-    "dummy": 0
+    "dummy": 0,
+    "KEY_WEATHER_CONDITION": 1,
+    "KEY_TEMP_HIGH": 2,
+    "KEY_TEMP_LOW": 3
   },
   "resources": {
     "media": [
