@@ -705,7 +705,7 @@ static void handle_init() {
   const bool animated = true;
   window_stack_push(data->window, animated);
 
-  vibes_double_pulse();  // DEBUG: two buzzes on launch = new binary confirmed
+
 }
 
 int main(void) {
