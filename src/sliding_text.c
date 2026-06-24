@@ -5,7 +5,7 @@
 #define KEY_TEMP_HIGH          2
 #define KEY_TEMP_LOW           3
 
-#define INFO_DISPLAY_MS  4000
+#define INFO_DISPLAY_MS  10000
 
 typedef enum {
   MOVING_IN,
