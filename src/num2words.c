@@ -169,7 +169,8 @@ void minute_to_formal_words(int minutes, char *first_word, char *second_word) {
     return;
   }
   if (minutes < 10) {
-    strcat(first_word, ONES[minutes%10]);
+    strcat(first_word, "oh");
+    strcat(second_word, ONES[minutes%10]);
     return;
   }
   if (minutes > 10 && minutes < 20) {

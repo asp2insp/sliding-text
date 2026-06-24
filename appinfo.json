@@ -1,9 +1,9 @@
 {
-  "uuid": "C7A9D535-E9BD-4C36-9C30-B45AD0908634",
+  "uuid": "A61AA094-51B1-45F8-AF34-9D0076C0F6C2",
   "shortName": "Sliding Text",
   "longName": "Sliding Text",
-  "companyName": "Pebble Technology",
-  "versionLabel": "1.0.2",
+  "companyName": "jcg",
+  "versionLabel": "2.0.0",
   "sdkVersion": "3",
   "targetPlatforms": [
     "aplite",
@@ -15,8 +15,12 @@
   "watchapp": {
     "watchface": true
   },
+  "capabilities": ["health", "configurable"],
   "appKeys": {
-    "dummy": 0
+    "dummy": 0,
+    "KEY_WEATHER_CONDITION": 1,
+    "KEY_TEMP_HIGH": 2,
+    "KEY_TEMP_LOW": 3
   },
   "resources": {
     "media": [
