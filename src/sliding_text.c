@@ -475,7 +475,7 @@ static void back_click_handler(ClickRecognizerRef recognizer, void *context) {
 }
 
 static void click_config_provider(void *context) {
-  window_single_click_subscribe(BUTTON_ID_SELECT, back_click_handler);
+  window_long_click_subscribe(BUTTON_ID_SELECT, 700, back_click_handler, NULL);
 }
 
 // ===== AppMessage (weather) =====
