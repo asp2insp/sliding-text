@@ -168,7 +168,7 @@ static void init_sliding_row(SlidingTextData *data, SlidingRow *row, GRect pos, 
   row->label = text_layer_create(pos);
   text_layer_set_text_alignment(row->label, PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentLeft));
   text_layer_set_background_color(row->label, GColorClear);
-  text_layer_set_text_color(row->label, GColorOrange);
+  text_layer_set_text_color(row->label, GColorWhite);
   if (font) {
     text_layer_set_font(row->label, font);
     row->unchanged_font = true;
@@ -475,7 +475,7 @@ static void back_click_handler(ClickRecognizerRef recognizer, void *context) {
 }
 
 static void click_config_provider(void *context) {
-  window_single_click_subscribe(BUTTON_ID_BACK, back_click_handler);
+  window_long_click_subscribe(BUTTON_ID_SELECT, 700, back_click_handler, NULL);
 }
 
 // ===== AppMessage (weather) =====
@@ -666,7 +666,7 @@ static void handle_init() {
   GFont norm14 = fonts_get_system_font(FONT_KEY_GOTHIC_14);
   data->demo_label = text_layer_create(GRect(0, -3, 100, 20));
   text_layer_set_background_color(data->demo_label, GColorClear);
-  text_layer_set_text_color(data->demo_label, GColorOrange);
+  text_layer_set_text_color(data->demo_label, GColorWhite);
   text_layer_set_font(data->demo_label, norm14);
   text_layer_set_text(data->demo_label, "demo mode");
   layer_add_child(window_layer, text_layer_get_layer(data->demo_label));
