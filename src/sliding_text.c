@@ -438,6 +438,9 @@ static void handle_minute_tick(struct tm *tick_time, TimeUnits units_changed) {
 // ===== Wrist-shake trigger =====
 
 static void accel_tap_handler(AccelAxisType axis, int32_t direction) {
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "Tap: axis=%d dir=%d state=%d", (int)axis, (int)direction, (int)s_data->info_state);
+  vibes_short_pulse();  // DEBUG: buzz to confirm handler fired
+
   SlidingTextData *data = s_data;
   if (data->info_state != INFO_HIDDEN) return;
 
