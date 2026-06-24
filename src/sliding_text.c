@@ -673,9 +673,6 @@ static void handle_init() {
   layer_set_hidden(text_layer_get_layer(data->demo_label), true);
   layer_mark_dirty(window_layer);
 
-  // Wrist shake triggers the info view (buttons not available in watchfaces)
-  accel_tap_service_subscribe(accel_tap_handler);
-
   // AppMessage for weather data from phone
   app_message_register_inbox_received(inbox_received_callback);
   app_message_open(128, 64);
@@ -689,6 +686,11 @@ static void handle_init() {
 
   const bool animated = true;
   window_stack_push(data->window, animated);
+
+  // Subscribe after window is pushed; startup buzz confirms new binary is installed
+  accel_tap_service_subscribe(accel_tap_handler);
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "accel_tap_service_subscribe called");
+  vibes_double_pulse();  // DEBUG: two buzzes on launch = new binary confirmed
 }
 
 int main(void) {
