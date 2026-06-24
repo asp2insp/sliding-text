@@ -477,19 +477,21 @@ static void trigger_info_view(void) {
 }
 
 static void accel_data_handler(AccelData *accel, uint32_t num_samples) {
+  int32_t max_total = 0;
+  for (uint32_t i = 0; i < num_samples; i++) {
+    if (accel[i].did_vibrate) continue;
+    int32_t total = abs(accel[i].x) + abs(accel[i].y) + abs(accel[i].z);
+    if (total > max_total) max_total = total;
+  }
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "Accel batch: max=%d state=%d", (int)max_total, (int)s_data->info_state);
+
   if (s_data->info_state != INFO_HIDDEN) return;
 
-  for (uint32_t i = 0; i < num_samples; i++) {
-    if (accel[i].did_vibrate) continue;  // ignore samples during haptic feedback
-
-    int32_t total = abs(accel[i].x) + abs(accel[i].y) + abs(accel[i].z);
-    if (total > 2500) {
-      time_t now = time(NULL);
-      if (now - s_last_shake_t >= 3) {
-        s_last_shake_t = now;
-        trigger_info_view();
-        return;
-      }
+  if (max_total > 2500) {
+    time_t now = time(NULL);
+    if (now - s_last_shake_t >= 3) {
+      s_last_shake_t = now;
+      trigger_info_view();
     }
   }
 }
