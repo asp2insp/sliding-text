@@ -44,10 +44,16 @@ function fetchAndSendWeather(coords) {
       var condition = CONDITION_MAP[owmGroup] || owmGroup.toLowerCase().substring(0, 8);
       var tempHigh  = Math.round(json.main.temp_max);
       var tempLow   = Math.round(json.main.temp_min);
+      var city      = (json.name || '').substring(0, 20);
 
       Pebble.sendAppMessage(
-        { 'KEY_WEATHER_CONDITION': condition, 'KEY_TEMP_HIGH': tempHigh, 'KEY_TEMP_LOW': tempLow },
-        function() { console.log('Weather sent: ' + condition + ' ' + tempHigh + '/' + tempLow); },
+        {
+          'KEY_WEATHER_CONDITION': condition,
+          'KEY_TEMP_HIGH': tempHigh,
+          'KEY_TEMP_LOW': tempLow,
+          'KEY_CITY_NAME': city
+        },
+        function() { console.log('Weather sent: ' + condition + ' ' + tempHigh + '/' + tempLow + ' ' + city); },
         function(e) { console.log('Send failed: ' + JSON.stringify(e)); }
       );
     } catch(err) {

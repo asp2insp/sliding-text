@@ -4,8 +4,9 @@
 #define KEY_WEATHER_CONDITION  1
 #define KEY_TEMP_HIGH          2
 #define KEY_TEMP_LOW           3
+#define KEY_CITY_NAME          4
 
-#define INFO_DISPLAY_MS  10000
+#define CARD_DISPLAY_MS  3000
 
 typedef enum {
   MOVING_IN,
@@ -36,6 +37,11 @@ typedef enum {
 } InfoViewState;
 
 typedef struct {
+  char text[3][32];
+  int num_rows;
+} InfoCard;
+
+typedef struct {
   TextLayer *demo_label;
   SlidingRow rows[3];
   int last_hour;
@@ -43,6 +49,7 @@ typedef struct {
 
   GFont bitham42_bold;
   GFont bitham42_light;
+  GFont bitham42_numbers;
 
   Window *window;
   Animation *animation;
@@ -62,15 +69,18 @@ typedef struct {
 
   } render_state;
 
-  // Info (health + weather) view
+  // Info card carousel
   InfoViewState info_state;
   TextLayer *info_labels[3];
-  char info_strings[3][40];
-  GColor info_colors[3];
   AppTimer *info_timer;
+  InfoCard cards[3];
+  int card_count;
+  int current_card;
+  bool card_has_next;
 
   // Weather received via AppMessage
   char weather_condition[32];
+  char city_name[32];
   int weather_temp_high;
   int weather_temp_low;
   bool weather_available;
@@ -79,44 +89,12 @@ typedef struct {
 
 SlidingTextData *s_data;
 
-// ===== Color coding =====
 
-static GColor steps_color(int steps) {
-#if defined(PBL_COLOR)
-  if (steps >= 8000) return GColorGreen;
-  if (steps >= 4000) return GColorChromeYellow;
-  return GColorRed;
-#else
-  return GColorWhite;
-#endif
-}
+// ===== Info card data =====
 
-static GColor hr_color(int bpm) {
-#if defined(PBL_COLOR)
-  if (bpm == 0) return GColorLightGray;
-  if (bpm >= 100) return GColorRed;
-  if (bpm >= 60) return GColorGreen;
-  return GColorCyan;
-#else
-  return GColorWhite;
-#endif
-}
-
-static GColor temp_color(int temp_high) {
-#if defined(PBL_COLOR)
-  if (temp_high >= 80) return GColorRed;
-  if (temp_high >= 50) return GColorChromeYellow;
-  return GColorCyan;
-#else
-  return GColorWhite;
-#endif
-}
-
-// ===== Info view data =====
-
-static void build_info_view(SlidingTextData *data) {
-  int steps = 0;
-  int bpm = 0;
+static void build_cards(SlidingTextData *data) {
+  int steps = 0, bpm = 0;
+  bool steps_ok = false;
 
 #if defined(PBL_HEALTH)
   time_t start = time_start_of_today();
@@ -126,6 +104,7 @@ static void build_info_view(SlidingTextData *data) {
     health_service_metric_accessible(HealthMetricStepCount, start, now);
   if (sm & HealthServiceAccessibilityMaskAvailable) {
     steps = (int)health_service_sum(HealthMetricStepCount, start, now);
+    steps_ok = true;
   }
 
   HealthServiceAccessibilityMask hm =
@@ -135,30 +114,52 @@ static void build_info_view(SlidingTextData *data) {
   }
 #endif
 
-  if (steps >= 1000) {
-    snprintf(data->info_strings[0], sizeof(data->info_strings[0]),
-             "%dk steps", steps / 1000);
-  } else {
-    snprintf(data->info_strings[0], sizeof(data->info_strings[0]),
-             "%d steps", steps);
+  data->card_count = 0;
+
+  if (steps_ok) {
+    InfoCard *c = &data->cards[data->card_count++];
+    c->num_rows = 2;
+    snprintf(c->text[0], sizeof(c->text[0]), "%d", steps);
+    snprintf(c->text[1], sizeof(c->text[1]), "steps");
+    c->text[2][0] = '\0';
   }
-  data->info_colors[0] = steps_color(steps);
 
   if (bpm > 0) {
-    snprintf(data->info_strings[1], sizeof(data->info_strings[1]), "%d bpm", bpm);
-  } else {
-    snprintf(data->info_strings[1], sizeof(data->info_strings[1]), "-- bpm");
+    InfoCard *c = &data->cards[data->card_count++];
+    c->num_rows = 2;
+    snprintf(c->text[0], sizeof(c->text[0]), "%d", bpm);
+    snprintf(c->text[1], sizeof(c->text[1]), "bpm");
+    c->text[2][0] = '\0';
   }
-  data->info_colors[1] = hr_color(bpm);
 
   if (data->weather_available) {
-    snprintf(data->info_strings[2], sizeof(data->info_strings[2]),
-             "%s %d/%d",
-             data->weather_condition, data->weather_temp_high, data->weather_temp_low);
-  } else {
-    snprintf(data->info_strings[2], sizeof(data->info_strings[2]), "no weather");
+    InfoCard *c = &data->cards[data->card_count++];
+    bool has_city = data->city_name[0] != '\0';
+    c->num_rows = has_city ? 3 : 2;
+    snprintf(c->text[0], sizeof(c->text[0]), "%d  %d",
+             data->weather_temp_high, data->weather_temp_low);
+    snprintf(c->text[1], sizeof(c->text[1]), "%s", data->weather_condition);
+    if (has_city)
+      snprintf(c->text[2], sizeof(c->text[2]), "%s", data->city_name);
+    else
+      c->text[2][0] = '\0';
   }
-  data->info_colors[2] = temp_color(data->weather_temp_high);
+}
+
+static void setup_card_layers(SlidingTextData *data, int card_idx) {
+  InfoCard *c = &data->cards[card_idx];
+  GFont value_font = fonts_get_system_font(FONT_KEY_ROBOTO_BOLD_SUBSET_49);
+  for (int i = 0; i < 3; i++) {
+    if (i < c->num_rows) {
+      // Re-apply font at display time: value row uses roboto49, word rows use bitham light
+      text_layer_set_font(data->info_labels[i], i == 0 ? value_font : data->bitham42_light);
+      text_layer_set_text(data->info_labels[i], c->text[i]);
+      layer_set_hidden(text_layer_get_layer(data->info_labels[i]), false);
+    } else {
+      text_layer_set_text(data->info_labels[i], "");
+      layer_set_hidden(text_layer_get_layer(data->info_labels[i]), true);
+    }
+  }
 }
 
 // ===== Existing sliding row helpers =====
@@ -256,8 +257,8 @@ static bool update_sliding_row(SlidingTextData *data, SlidingRow *row) {
   return something_changed;
 }
 
-// ===== Info dismiss callback (forward declaration) =====
-static void info_dismiss_callback(void *context);
+// ===== Card timer callback (forward declaration) =====
+static void card_timer_callback(void *context);
 
 // ===== Animation update =====
 
@@ -271,9 +272,11 @@ static void animation_update(struct Animation *animation, const AnimationProgres
     GRect bounds = layer_get_unobstructed_bounds(window_layer);
     const int16_t width = bounds.size.w;
 
-    // During entering: time goes left (-width), info comes in from right (→0)
-    // During leaving:  info goes left (-width), time comes in from right (→0)
-    const int16_t time_target = (data->info_state == INFO_ENTERING) ? -width : 0;
+    // During entering: time goes left (-width), info slides in from right (→0)
+    // During card-to-card leaving: time stays at -width, info slides out left
+    // During final leaving: info goes left (-width), time slides back in (→0)
+    const int16_t time_target = (data->info_state == INFO_ENTERING || data->card_has_next)
+                                 ? -width : 0;
     const int16_t info_target = (data->info_state == INFO_ENTERING) ? 0 : -width;
 
     bool all_done = true;
@@ -313,15 +316,29 @@ static void animation_update(struct Animation *animation, const AnimationProgres
     if (all_done) {
       if (data->info_state == INFO_ENTERING) {
         data->info_state = INFO_VISIBLE;
-        data->info_timer = app_timer_register(INFO_DISPLAY_MS, info_dismiss_callback, NULL);
-      } else {
-        data->info_state = INFO_HIDDEN;
-        // Reset info layers to off-screen right for next trigger
-        for (int i = 0; i < 3; i++) {
-          Layer *il = text_layer_get_layer(data->info_labels[i]);
-          GRect f = layer_get_frame(il);
-          f.origin.x = width;
-          layer_set_frame(il, f);
+        data->info_timer = app_timer_register(CARD_DISPLAY_MS, card_timer_callback, NULL);
+      } else { // INFO_LEAVING
+        if (data->card_has_next) {
+          // Advance to next card: load content, reset info layers to off-screen right
+          data->current_card++;
+          setup_card_layers(data, data->current_card);
+          for (int i = 0; i < 3; i++) {
+            Layer *il = text_layer_get_layer(data->info_labels[i]);
+            GRect f = layer_get_frame(il);
+            f.origin.x = width;
+            layer_set_frame(il, f);
+          }
+          data->card_has_next = false;
+          data->info_state = INFO_ENTERING;
+          something_changed = true;  // keep animation running
+        } else {
+          data->info_state = INFO_HIDDEN;
+          for (int i = 0; i < 3; i++) {
+            Layer *il = text_layer_get_layer(data->info_labels[i]);
+            GRect f = layer_get_frame(il);
+            f.origin.x = width;
+            layer_set_frame(il, f);
+          }
         }
       }
     }
@@ -379,50 +396,58 @@ static void make_animation() {
   animation_schedule(s_data->animation);
 }
 
-// ===== Info view dismiss =====
+// ===== Card timer =====
 
-static void info_dismiss_callback(void *context) {
+static void card_timer_callback(void *context) {
   SlidingTextData *data = s_data;
   data->info_timer = NULL;
 
-  Layer *window_layer = window_get_root_layer(data->window);
-  GRect bounds = layer_get_unobstructed_bounds(window_layer);
-  const int16_t width = bounds.size.w;
+  if (data->current_card + 1 < data->card_count) {
+    // More cards to show: slide current out, next card slides in
+    data->card_has_next = true;
+    data->info_state = INFO_LEAVING;
+    make_animation();
+  } else {
+    // Last card: return to time display
+    data->card_has_next = false;
 
-  // Refresh time text while rows are still off-screen, so correct words slide in
-  time_t now = time(NULL);
-  struct tm t = *localtime(&now);
-  struct SlidingTextRenderState *rs = &data->render_state;
+    Layer *window_layer = window_get_root_layer(data->window);
+    GRect bounds = layer_get_unobstructed_bounds(window_layer);
+    const int16_t width = bounds.size.w;
 
-  minute_to_formal_words(t.tm_min,
-    rs->first_minutes[rs->next_minutes],
-    rs->second_minutes[rs->next_minutes]);
-  text_layer_set_text(data->rows[1].label, rs->first_minutes[rs->next_minutes]);
-  text_layer_set_text(data->rows[2].label, rs->second_minutes[rs->next_minutes]);
-  rs->next_minutes = rs->next_minutes ? 0 : 1;
+    time_t now = time(NULL);
+    struct tm t = *localtime(&now);
+    struct SlidingTextRenderState *rs = &data->render_state;
 
-  hour_to_12h_word(t.tm_hour, rs->hours[rs->next_hours]);
-  text_layer_set_text(data->rows[0].label, rs->hours[rs->next_hours]);
-  rs->next_hours = rs->next_hours ? 0 : 1;
+    minute_to_formal_words(t.tm_min,
+      rs->first_minutes[rs->next_minutes],
+      rs->second_minutes[rs->next_minutes]);
+    text_layer_set_text(data->rows[1].label, rs->first_minutes[rs->next_minutes]);
+    text_layer_set_text(data->rows[2].label, rs->second_minutes[rs->next_minutes]);
+    rs->next_minutes = rs->next_minutes ? 0 : 1;
 
-  data->last_minute = t.tm_min;
-  data->last_hour = t.tm_hour;
+    hour_to_12h_word(t.tm_hour, rs->hours[rs->next_hours]);
+    text_layer_set_text(data->rows[0].label, rs->hours[rs->next_hours]);
+    rs->next_hours = rs->next_hours ? 0 : 1;
 
-  // Clear any in-progress text-change animation state
-  for (int i = 0; i < 3; i++) {
-    data->rows[i].state = IN_FRAME;
-    data->rows[i].next_string = NULL;
+    data->last_minute = t.tm_min;
+    data->last_hour = t.tm_hour;
+
+    for (int i = 0; i < 3; i++) {
+      data->rows[i].state = IN_FRAME;
+      data->rows[i].next_string = NULL;
+    }
+
+    // Teleport time rows to off-screen right so they slide back in from the right
+    for (int i = 0; i < 3; i++) {
+      GRect f = layer_get_frame(text_layer_get_layer(data->rows[i].label));
+      f.origin.x = width;
+      layer_set_frame(text_layer_get_layer(data->rows[i].label), f);
+    }
+
+    data->info_state = INFO_LEAVING;
+    make_animation();
   }
-
-  // Teleport time rows to off-screen right so they slide back in from the right
-  for (int i = 0; i < 3; i++) {
-    GRect f = layer_get_frame(text_layer_get_layer(data->rows[i].label));
-    f.origin.x = width;
-    layer_set_frame(text_layer_get_layer(data->rows[i].label), f);
-  }
-
-  data->info_state = INFO_LEAVING;
-  make_animation();
 }
 
 // ===== Minute tick =====
@@ -440,14 +465,14 @@ static void handle_minute_tick(struct tm *tick_time, TimeUnits units_changed) {
 static void trigger_info_view(void) {
   SlidingTextData *data = s_data;
 
-  build_info_view(data);
+  build_cards(data);
+  if (data->card_count == 0) return;
 
-  for (int i = 0; i < 3; i++) {
-    text_layer_set_text(data->info_labels[i], data->info_strings[i]);
-    text_layer_set_text_color(data->info_labels[i], data->info_colors[i]);
-  }
+  data->current_card = 0;
+  data->card_has_next = false;
+  setup_card_layers(data, 0);
 
-  // Cancel any in-progress text-change animation and snap rows to center
+  // Cancel any in-progress text-change animation and snap time rows to center
   if (data->animation) {
     animation_unschedule(data->animation);
   }
@@ -459,7 +484,7 @@ static void trigger_info_view(void) {
     layer_set_frame(text_layer_get_layer(data->rows[i].label), f);
   }
 
-  // Ensure info layers start off-screen right
+  // Position info labels off-screen right
   Layer *window_layer = window_get_root_layer(data->window);
   GRect bounds = layer_get_unobstructed_bounds(window_layer);
   const int16_t width = bounds.size.w;
@@ -471,14 +496,18 @@ static void trigger_info_view(void) {
 
   data->info_state = INFO_ENTERING;
   make_animation();
-  vibes_short_pulse();  // DEBUG: single buzz = info view triggered
 }
 
 static void accel_tap_handler(AccelAxisType axis, int32_t direction) {
-  APP_LOG(APP_LOG_LEVEL_DEBUG, "Tap: axis=%d dir=%d state=%d",
-          (int)axis, (int)direction, (int)s_data->info_state);
   if (s_data->info_state != INFO_HIDDEN) return;
-  trigger_info_view();
+  static time_t last_tap = 0;
+  time_t now = time(NULL);
+  if (now - last_tap <= 2) {
+    last_tap = 0;
+    trigger_info_view();
+  } else {
+    last_tap = now;
+  }
 }
 
 // ===== AppMessage (weather) =====
@@ -489,6 +518,7 @@ static void inbox_received_callback(DictionaryIterator *iterator, void *context)
   Tuple *cond_t  = dict_find(iterator, KEY_WEATHER_CONDITION);
   Tuple *high_t  = dict_find(iterator, KEY_TEMP_HIGH);
   Tuple *low_t   = dict_find(iterator, KEY_TEMP_LOW);
+  Tuple *city_t  = dict_find(iterator, KEY_CITY_NAME);
 
   if (cond_t) {
     strncpy(data->weather_condition, cond_t->value->cstring,
@@ -498,6 +528,11 @@ static void inbox_received_callback(DictionaryIterator *iterator, void *context)
   }
   if (high_t) data->weather_temp_high = (int)high_t->value->int32;
   if (low_t)  data->weather_temp_low  = (int)low_t->value->int32;
+  if (city_t) {
+    strncpy(data->city_name, city_t->value->cstring,
+            sizeof(data->city_name) - 1);
+    data->city_name[sizeof(data->city_name) - 1] = '\0';
+  }
 }
 
 // ===== Layout =====
@@ -559,7 +594,6 @@ static void handle_unobstructed_change(AnimationProgress progress, void *context
 
 static void window_appear(Window *window) {
   accel_tap_service_subscribe(accel_tap_handler);
-  APP_LOG(APP_LOG_LEVEL_DEBUG, "accel_tap_service_subscribe called");
 }
 
 static void window_disappear(Window *window) {
@@ -605,8 +639,12 @@ static void handle_init() {
 
   data->info_state = INFO_HIDDEN;
   data->info_timer = NULL;
+  data->card_count = 0;
+  data->current_card = 0;
+  data->card_has_next = false;
   data->weather_available = false;
   data->weather_condition[0] = '\0';
+  data->city_name[0] = '\0';
   data->weather_temp_high = 0;
   data->weather_temp_low = 0;
 
@@ -616,18 +654,21 @@ static void handle_init() {
 #if defined(PBL_PLATFORM_EMERY)
   data->bitham42_bold = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_GOTHAM_BOLD_50));
   data->bitham42_light = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_GOTHAM_LIGHT_50));
+  data->bitham42_numbers = data->bitham42_bold;
   const int16_t row_h = 48;
   const int16_t frame_h = 70;
   const int16_t row_gap = 0;
 #elif defined(PBL_PLATFORM_GABBRO)
   data->bitham42_bold = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_GOTHAM_BOLD_40));
   data->bitham42_light = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_GOTHAM_LIGHT_32));
+  data->bitham42_numbers = data->bitham42_bold;
   const int16_t row_h = 38;
   const int16_t frame_h = 56;
   const int16_t row_gap = 0;
 #else
   data->bitham42_bold = fonts_get_system_font(FONT_KEY_BITHAM_42_BOLD);
   data->bitham42_light = fonts_get_system_font(FONT_KEY_BITHAM_42_LIGHT);
+  data->bitham42_numbers = fonts_get_system_font(FONT_KEY_BITHAM_42_MEDIUM_NUMBERS);
   const int16_t row_h = 0;
   const int16_t frame_h = 0;
   const int16_t row_gap = 0;
@@ -663,18 +704,30 @@ static void handle_init() {
   const int16_t info_hs[3] = {60, 96, 132};
 #endif
 
-  // Info view layers — same positions as time rows, initially off-screen right
-  GFont info_font = fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD);
-  for (int i = 0; i < 3; i++) {
-    data->info_labels[i] = text_layer_create(GRect(width, info_ys[i], width, info_hs[i]));
-    text_layer_set_background_color(data->info_labels[i], GColorClear);
-    text_layer_set_text_color(data->info_labels[i], GColorOrange);
-    text_layer_set_font(data->info_labels[i], info_font);
-    text_layer_set_text_alignment(data->info_labels[i],
-      PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentLeft));
-    text_layer_set_overflow_mode(data->info_labels[i], GTextOverflowModeWordWrap);
-    layer_add_child(window_layer, text_layer_get_layer(data->info_labels[i]));
-  }
+  // Info card layers — identical setup to time rows, initially off-screen right
+  data->info_labels[0] = text_layer_create(GRect(width, info_ys[0], width, info_hs[0]));
+  text_layer_set_background_color(data->info_labels[0], GColorClear);
+  text_layer_set_text_color(data->info_labels[0], GColorWhite);
+  text_layer_set_font(data->info_labels[0], data->bitham42_numbers);
+  text_layer_set_text_alignment(data->info_labels[0],
+    PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentLeft));
+  layer_add_child(window_layer, text_layer_get_layer(data->info_labels[0]));
+
+  data->info_labels[1] = text_layer_create(GRect(width, info_ys[1], width, info_hs[1]));
+  text_layer_set_background_color(data->info_labels[1], GColorClear);
+  text_layer_set_text_color(data->info_labels[1], GColorWhite);
+  text_layer_set_font(data->info_labels[1], data->bitham42_light);
+  text_layer_set_text_alignment(data->info_labels[1],
+    PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentLeft));
+  layer_add_child(window_layer, text_layer_get_layer(data->info_labels[1]));
+
+  data->info_labels[2] = text_layer_create(GRect(width, info_ys[2], width, info_hs[2]));
+  text_layer_set_background_color(data->info_labels[2], GColorClear);
+  text_layer_set_text_color(data->info_labels[2], GColorWhite);
+  text_layer_set_font(data->info_labels[2], data->bitham42_light);
+  text_layer_set_text_alignment(data->info_labels[2],
+    PBL_IF_ROUND_ELSE(GTextAlignmentCenter, GTextAlignmentLeft));
+  layer_add_child(window_layer, text_layer_get_layer(data->info_labels[2]));
 
   GFont norm14 = fonts_get_system_font(FONT_KEY_GOTHIC_14);
   data->demo_label = text_layer_create(GRect(0, -3, 100, 20));
@@ -688,7 +741,7 @@ static void handle_init() {
 
   // AppMessage for weather data from phone
   app_message_register_inbox_received(inbox_received_callback);
-  app_message_open(128, 64);
+  app_message_open(256, 64);
 
   make_animation();
 
